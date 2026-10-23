@@ -4,15 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>YouTube 日本ランキング</title>
-<meta name="description" content="日本で人気のYouTube通常動画（ショート除く）の急上昇・デイリー・ウィークリーランキング">
+<meta name="description" content="日本で人気のYouTube動画（ショート除く）とライブ配信の急上昇・デイリー・ウィークリーランキング">
 <style>
 :root{
   --bg:#f6f6f4;--card:#fff;--ink:#16161a;--sub:#6b6b73;--line:#e4e4e0;
-  --accent:#e0262b;--up:#1a8f4c;--down:#c2410c;--chip:#ececE8;
+  --accent:#e0262b;--up:#1a8f4c;--down:#c2410c;--chip:#ececE8;--live:#e0262b;
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#111113;--card:#1b1b1f;--ink:#f1f1f3;--sub:#9a9aa3;--line:#2a2a30;
-  --accent:#ff4d52;--up:#4ade80;--down:#fb923c;--chip:#26262b;
+  --accent:#ff4d52;--up:#4ade80;--down:#fb923c;--chip:#26262b;--live:#ff4d52;
 }}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
@@ -21,13 +21,17 @@ body{margin:0;background:var(--bg);color:var(--ink);
 header{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);
   backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
 .wrap{max-width:960px;margin:0 auto;padding:0 16px}
-.top{display:flex;align-items:baseline;gap:12px;padding:14px 0 8px}
-h1{font-size:18px;margin:0;letter-spacing:.02em}
+.top{display:flex;align-items:center;gap:12px;padding:12px 0 6px;flex-wrap:wrap}
+h1{font-size:18px;margin:0;letter-spacing:.02em;white-space:nowrap}
 h1 b{color:var(--accent)}
+.seg{display:inline-flex;background:var(--chip);border-radius:999px;padding:3px}
+.seg button{border:0;background:none;color:var(--sub);font:inherit;font-size:13px;font-weight:700;
+  padding:5px 14px;border-radius:999px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 #updated{font-size:12px;color:var(--sub);margin-left:auto;white-space:nowrap}
 nav.tabs{display:flex;gap:4px}
 nav.tabs button{flex:1;border:0;background:none;color:var(--sub);font:inherit;font-weight:600;
-  font-size:15px;padding:10px 0;border-bottom:2px solid transparent;cursor:pointer}
+  font-size:15px;padding:10px 0;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
 nav.tabs button[aria-selected=true]{color:var(--ink);border-color:var(--accent)}
 .chips{display:flex;gap:6px;overflow-x:auto;padding:10px 0;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
@@ -48,30 +52,39 @@ li:nth-child(-n+3) .rank .n{color:var(--accent)}
 .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .thumb .dur{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.8);color:#fff;
   font-size:11px;font-weight:600;padding:1px 4px;border-radius:4px;font-variant-numeric:tabular-nums}
+.thumb .dur.live{background:var(--live)}
 .title{font-size:15px;font-weight:600;line-height:1.4;margin:0 0 4px;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .meta{font-size:12px;color:var(--sub);line-height:1.6}
 .stat{font-size:13px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
 .stat .est{font-weight:400;color:var(--sub);font-size:11px}
 .cat{display:inline-block;font-size:11px;background:var(--chip);border-radius:4px;padding:0 6px;margin-right:6px}
-footer{font-size:11px;color:var(--sub);text-align:center;padding:24px 16px 40px}
+footer{font-size:11px;color:var(--sub);text-align:center;padding:24px 16px 40px;line-height:1.8}
+footer a{color:inherit}
 .empty{color:var(--sub);text-align:center;padding:60px 0}
 @media (max-width:600px){
   li a{grid-template-columns:28px 128px 1fr;gap:10px}
   .rank .n{font-size:17px}
   .title{font-size:14px}
+  nav.tabs button{font-size:14px}
+}
+@media (max-width:400px){
+  nav.tabs button{font-size:13px}
 }
 </style>
 </head>
 <body>
 <header>
   <div class="wrap">
-    <div class="top"><h1><b>▶</b> YouTube 日本ランキング</h1><span id="updated"></span></div>
-    <nav class="tabs" role="tablist">
-      <button role="tab" data-tab="trending" aria-selected="true">急上昇</button>
-      <button role="tab" data-tab="daily" aria-selected="false">デイリー</button>
-      <button role="tab" data-tab="weekly" aria-selected="false">ウィークリー</button>
-    </nav>
+    <div class="top">
+      <h1><b>▶</b> YouTube 日本ランキング</h1>
+      <div class="seg" id="kind">
+        <button data-kind="video" aria-pressed="true">動画</button>
+        <button data-kind="live" aria-pressed="false">ライブ</button>
+      </div>
+      <span id="updated"></span>
+    </div>
+    <nav class="tabs" role="tablist" id="tabs"></nav>
     <div class="chips" id="chips"></div>
   </div>
 </header>
@@ -79,22 +92,46 @@ footer{font-size:11px;color:var(--sub);text-align:center;padding:24px 16px 40px}
   <p id="desc"></p>
   <ol id="list"></ol>
 </main>
-<footer>通常動画のみ（ショート・配信中のライブは除外）。YouTube Data API のデータを2時間ごとに集計した独自ランキングで、YouTube公式のものではありません。</footer>
+<footer>
+  動画はショートを除外。ライブは配信アーカイブと配信中の枠を集計しています。<br>
+  YouTube Data API のデータを2時間ごとに集計した独自ランキングで、YouTube公式のものではありません。<br>
+  <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener">YouTube 利用規約</a> ・
+  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google プライバシーポリシー</a>
+</footer>
 <script>
-const DESC = {
-  trending: "投稿72時間以内の動画を、直近の再生ペース（新しさで補正）で順位付け",
-  daily: "直近24時間で再生数が増えた順",
-  weekly: "直近7日間で再生数が増えた順",
+const TABS = {
+  video: [["trending", "急上昇"], ["daily", "デイリー"], ["weekly", "ウィークリー"]],
+  live: [["now", "配信中"], ["trending", "急上昇"], ["daily", "デイリー"], ["weekly", "ウィークリー"]],
 };
-let data = null, tab = "trending", cat = "すべて";
-try { const s = JSON.parse(localStorage.getItem("ytjp") || "{}"); tab = s.tab || tab; cat = s.cat || cat; } catch (e) {}
+const DESC = {
+  "video/trending": "投稿72時間以内の動画を、直近の再生ペース（新しさで補正）で順位付け",
+  "video/daily": "直近24時間で再生数が増えた動画",
+  "video/weekly": "直近7日間で再生数が増えた動画",
+  "live/now": "いま配信中のライブを同時視聴者数の多い順に（集計時点）",
+  "live/trending": "72時間以内に始まった配信のアーカイブを、直近の再生ペースで順位付け",
+  "live/daily": "直近24時間で再生数が増えた配信アーカイブ",
+  "live/weekly": "直近7日間で再生数が増えた配信アーカイブ",
+};
+let data = null, kind = "video", tab = "trending", cat = "すべて";
+
+function readHash() {
+  const [k, t] = location.hash.slice(1).split("/");
+  if (TABS[k]) { kind = k; tab = TABS[k].some(x => x[0] === t) ? t : TABS[k][0][0]; return true; }
+  return false;
+}
+if (!readHash()) {
+  try { const s = JSON.parse(localStorage.getItem("ytjp2") || "{}"); if (TABS[s.kind]) { kind = s.kind; tab = s.tab || TABS[kind][0][0]; } } catch (e) {}
+}
 
 const man = n => n >= 1e8 ? (n / 1e8).toFixed(n >= 1e9 ? 0 : 1) + "億" : n >= 1e4 ? (n / 1e4).toFixed(n >= 1e6 ? 0 : 1) + "万" : n.toLocaleString("ja-JP");
 const dur = s => { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${x}` : `${m}:${x}`; };
 const ago = t => { const h = (Date.now() / 1000 - t) / 3600; return h < 1 ? Math.max(1, Math.round(h * 60)) + "分前" : h < 24 ? Math.round(h) + "時間前" : Math.round(h / 24) + "日前"; };
-const esc = s => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-function save() { try { localStorage.setItem("ytjp", JSON.stringify({ tab, cat })); } catch (e) {} }
+function save() {
+  try { localStorage.setItem("ytjp2", JSON.stringify({ kind, tab })); } catch (e) {}
+  history.replaceState(null, "", `#${kind}/${tab}`);
+}
 
 function move(x) {
   if (x.prev == null) return '<span class="mv new">NEW</span>';
@@ -103,44 +140,60 @@ function move(x) {
 }
 
 function stat(x) {
-  if (tab === "trending") return `🔥 ${man(x.rate)}回/時`;
+  if (tab === "now") return `👀 ${man(x.viewers)}人が視聴中`;
+  if (tab === "trending") return `🔥 ${man(x.rate)}回/時${x.est ? ' <span class="est">（推定）</span>' : ""}`;
   const lbl = tab === "daily" ? "24時間" : "7日間";
   return `+${man(x.gain)}回 <span class="est">/ ${lbl}${x.est ? "（推定）" : ""}</span>`;
 }
 
+function meta(x) {
+  if (tab === "now") return `${esc(x.ch)}<br>${x.start ? ago(x.start).replace("前", "前から配信") : "配信中"}`;
+  const when = kind === "live" ? ago(x.pub).replace("前", "前に配信") : ago(x.pub);
+  return `${esc(x.ch)}<br>${man(x.views)}回視聴・${when}`;
+}
+
 function render() {
-  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === tab));
-  document.getElementById("desc").textContent = DESC[tab];
-  const all = data.lists[tab] || [];
-  const cats = ["すべて", ...[...new Set(all.map(x => x.cat))].sort((a, b) => all.filter(x => x.cat === b).length - all.filter(x => x.cat === a).length)];
+  document.querySelectorAll("#kind button").forEach(b => b.setAttribute("aria-pressed", b.dataset.kind === kind));
+  document.getElementById("tabs").innerHTML = TABS[kind].map(([k, l]) =>
+    `<button role="tab" data-tab="${k}" aria-selected="${k === tab}">${l}</button>`).join("");
+  document.getElementById("desc").textContent = DESC[`${kind}/${tab}`];
+  const all = ((data.lists[kind] || {})[tab]) || [];
+  const count = c => all.filter(x => x.cat === c).length;
+  const cats = ["すべて", ...[...new Set(all.map(x => x.cat))].sort((a, b) => count(b) - count(a))];
   if (!cats.includes(cat)) cat = "すべて";
   document.getElementById("chips").innerHTML = cats.map(c => `<button aria-pressed="${c === cat}">${esc(c)}</button>`).join("");
   const rows = cat === "すべて" ? all : all.filter(x => x.cat === cat);
   const list = document.getElementById("list");
-  if (!rows.length) { list.innerHTML = '<li class="empty">データがまだありません</li>'; return; }
+  if (!rows.length) { list.innerHTML = `<li class="empty">${tab === "now" ? "集計時点で配信中のライブはありません" : "データがまだありません"}</li>`; return; }
   list.innerHTML = rows.map(x => `
-    <li><a href="https://www.youtube.com/watch?v=${x.id}" target="_blank" rel="noopener">
+    <li><a href="https://www.youtube.com/watch?v=${encodeURIComponent(x.id)}" target="_blank" rel="noopener">
       <div class="rank"><span class="n">${x.rank}</span>${move(x)}</div>
-      <div class="thumb"><img loading="lazy" src="https://i.ytimg.com/vi/${x.id}/mqdefault.jpg" alt="" onerror="this.remove()"><span class="dur">${dur(x.dur)}</span></div>
+      <div class="thumb"><img loading="lazy" src="https://i.ytimg.com/vi/${encodeURIComponent(x.id)}/mqdefault.jpg" alt="" onerror="this.remove()">${tab === "now" ? '<span class="dur live">● LIVE</span>' : `<span class="dur">${dur(x.dur)}</span>`}</div>
       <div>
         <p class="title">${esc(x.title)}</p>
-        <div class="meta"><span class="cat">${esc(x.cat)}</span>${esc(x.ch)}<br>${man(x.views)}回視聴・${ago(x.pub)}</div>
+        <div class="meta"><span class="cat">${esc(x.cat)}</span>${meta(x)}</div>
         <div class="stat">${stat(x)}</div>
       </div>
     </a></li>`).join("");
 }
 
-document.querySelector("nav.tabs").addEventListener("click", e => {
+document.getElementById("kind").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b || b.dataset.kind === kind) return;
+  kind = b.dataset.kind; tab = TABS[kind][0][0]; cat = "すべて"; save(); render(); window.scrollTo({ top: 0 });
+});
+document.getElementById("tabs").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   tab = b.dataset.tab; save(); render(); window.scrollTo({ top: 0 });
 });
 document.getElementById("chips").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
-  cat = b.textContent; save(); render();
+  cat = b.textContent; render();
 });
+window.addEventListener("hashchange", () => { if (readHash() && data) render(); });
 
 fetch("data/ranking.json", { cache: "no-store" }).then(r => r.json()).then(d => {
   data = d;
+  if (!data.lists.video) data.lists = { video: data.lists, live: {} };  // 旧形式のデータにも対応
   const t = new Date(d.updatedAt * 1000);
   document.getElementById("updated").textContent = t.toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) + " 更新";
   render();
