@@ -1,0 +1,79 @@
+name: update-ranking
+
+on:
+  schedule:
+    - cron: "17 */2 * * *"   # 2時間おき（UTC）。GitHub側で数分〜数十分遅れることがあります
+  workflow_dispatch:          # 手動実行ボタン
+
+permissions:
+  contents: write   # 60日無活動で定期実行が止まるのを防ぐ keepalive コミット用
+  pages: write
+  id-token: write
+
+concurrency:
+  group: update-ranking
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 前回の追跡データを復元（キャッシュ → 無ければ公開中サイトから取得）
+      - name: Restore state
+        uses: actions/cache/restore@v4
+        with:
+          path: state
+          key: state-${{ github.run_id }}
+          restore-keys: state-
+
+      - name: Fallback - fetch state from Pages
+        run: |
+          if [ ! -f state/state.json.gz ]; then
+            mkdir -p state
+            OWNER="${GITHUB_REPOSITORY%%/*}"; REPO="${GITHUB_REPOSITORY##*/}"
+            curl -fsSL "https://${OWNER,,}.github.io/${REPO}/data/state.json.gz" -o state/state.json.gz \
+              || { echo "no previous state (first run)"; rm -f state/state.json.gz; }
+          fi
+
+      - name: Collect
+        env:
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+        run: python collector/collect.py
+
+      - name: Save state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state
+          key: state-${{ github.run_id }}
+
+      - name: Bundle site
+        run: cp state/state.json.gz site/data/state.json.gz
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      # 公開リポジトリは60日コミットが無いと定期実行が自動停止するので、30日ごとに1行だけコミット
+      - name: Keepalive
+        run: |
+          last=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - last )) -gt 2592000 ]; then
+            date -u +%FT%TZ > .keepalive
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .keepalive && git commit -m "keepalive" && git push
+          fi
