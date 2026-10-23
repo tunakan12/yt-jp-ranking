@@ -43,7 +43,7 @@ CFG = {
     "max_tracked": 8000,              # 追跡する動画の上限
     "min_duration_s": 61,             # これ以下はショート扱いで除外
     "shorts_check_max_s": 180,        # 61〜180秒は /shorts/ URL で判定
-    "live_min_duration_s": 600,       # 配信中に一度も見ていない動画は「ライブ痕跡あり＆10分以上」をライブ扱い
+    "live_min_duration_s": 600,       # 終了時刻が取れない配信は10分以上をライブ扱い
     "trend_max_age_h": 72,            # 急上昇の対象は投稿72時間以内
     "trend_window_h": 4,              # 急上昇の速度を測る直近時間
     "list_size": 100,
@@ -346,10 +346,7 @@ def admit_new(st, cands):
             st["live_seen"].pop(vid, None)
             continue
         seen = st["live_seen"].pop(vid, None)
-        if seen is not None:
-            kind = "live" if seen["real"] else "video"
-        else:
-            kind = "live" if (lsd and dur >= CFG["live_min_duration_s"]) else "video"
+        kind = ("live" if seen["real"] else "video") if seen is not None else classify_archive(lsd, dur)
         if kind == "video":
             short = dur < CFG["min_duration_s"]
             if not short and dur <= CFG["shorts_check_max_s"]:
@@ -361,28 +358,45 @@ def admit_new(st, cands):
         st["videos"][vid] = {
             "t": sn["title"], "c": sn["channelId"], "ct": sn["channelTitle"],
             "p": iso_to_ts((lsd or {}).get("actualStartTime") or sn["publishedAt"]),
-            "d": dur, "cat": sn.get("categoryId", ""), "k": kind, "snaps": [],
+            "d": dur, "cat": sn.get("categoryId", ""), "k": kind, "kv": 2, "snaps": [],
         }
         added += 1
     log(f"new candidates {len(new)} -> admitted {added}, live now {len(live_now)}")
     return live_now
 
 
+def classify_archive(lsd, dur):
+    """配信が終わってから初めて見た動画が、ライブのアーカイブか、プレミア公開（＝動画扱い）かを判定する。
+    プレミア公開は開始前のカウントダウン（通常約2分）の分だけ「放送時間」が動画の長さより長い。
+    ライブのアーカイブは放送時間と動画の長さがほぼ同じ（12時間超の配信や大きく編集されたものは差が大きい）。"""
+    if not lsd or not lsd.get("actualStartTime"):
+        return "video"
+    if not lsd.get("actualEndTime"):
+        return "live" if dur >= CFG["live_min_duration_s"] else "video"
+    gap = iso_to_ts(lsd["actualEndTime"]) - iso_to_ts(lsd["actualStartTime"]) - dur
+    return "video" if 60 <= gap <= 660 else "live"
+
+
 def migrate(st):
-    """旧バージョンの追跡データに 動画/ライブ の区別を付ける（1回だけ）"""
-    old = [k for k, v in st["videos"].items() if "k" not in v]
-    for ch in chunks(old, 50):
-        r = api("videos", part="contentDetails,liveStreamingDetails", id=",".join(ch), maxResults=50)
-        for it in r.get("items", []):
-            v = st["videos"][it["id"]]
-            lsd = it.get("liveStreamingDetails")
-            v["k"] = "live" if (lsd and v["d"] >= CFG["live_min_duration_s"]) else "video"
-            if lsd and lsd.get("actualStartTime"):
-                v["p"] = iso_to_ts(lsd["actualStartTime"])
-    for k in old:
+    """古い判定方法で分類した追跡データを、今の判定方法で分類し直す（1回だけ）"""
+    old = [k for k, v in st["videos"].items() if v.get("kv", 0) < 2]
+    try:
+        for ch in chunks(old, 50):
+            r = api("videos", part="contentDetails,liveStreamingDetails", id=",".join(ch), maxResults=50)
+            for it in r.get("items", []):
+                v = st["videos"][it["id"]]
+                lsd = it.get("liveStreamingDetails")
+                v["k"], v["kv"] = classify_archive(lsd, v["d"]), 2
+                if lsd and lsd.get("actualStartTime"):
+                    v["p"] = iso_to_ts(lsd["actualStartTime"])
+    except QuotaBudgetExceeded as e:
+        log("migration paused:", e)
+        old = []
+    for k in old:  # 取得できなかったもの（削除済みなど）も含めて完了扱い
         st["videos"][k].setdefault("k", "video")
+        st["videos"][k]["kv"] = 2
     if old:
-        log(f"migrated {len(old)} videos")
+        log(f"reclassified {len(old)} videos")
 
 
 def add_snap(v, s):
