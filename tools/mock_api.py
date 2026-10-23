@@ -23,7 +23,7 @@ def is_streamer(c):
 
 
 def is_premiere(c, k):
-    return c % 11 == 0 and k % 3 == 0
+    return c % 11 == 0 and k % 3 == 0 and not is_streamer(c)
 
 
 def video_list():
@@ -61,9 +61,14 @@ def live_state(vid, now):
     if is_streamer(c) or is_premiere(c, k):
         if now < pub:
             return "upcoming"
-        if now < pub + duration(c, k):
+        if now < pub + broadcast_len(c, k):
             return "live"
     return "none"
+
+
+def broadcast_len(c, k):
+    # プレミア公開は動画の前に約2分のカウントダウンが入る
+    return duration(c, k) + (118 if is_premiere(c, k) else 0)
 
 
 def is_shorts(vid):
@@ -117,7 +122,7 @@ def vitem(vid, now):
         if stt == "live":
             lsd["concurrentViewers"] = str(max(1, vw // 20))
         if stt == "none":
-            lsd["actualEndTime"] = iso(pub + d)
+            lsd["actualEndTime"] = iso(pub + broadcast_len(c, k))
         it["liveStreamingDetails"] = lsd
     return it
 
