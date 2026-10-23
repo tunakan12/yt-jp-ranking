@@ -3,7 +3,7 @@ name: update-ranking
 on:
   schedule:
     - cron: "17 */2 * * *"   # 2時間おき（UTC）。GitHub側で数分〜数十分遅れることがあります
-  workflow_dispatch:          # 手動実行ボタン
+  workflow_dispatch:          # 手動実行ボタン（search.list は1日100回までなので、連打は控えめに）
 
 permissions:
   contents: write   # 60日無活動で定期実行が止まるのを防ぐ keepalive コミット用
@@ -22,15 +22,15 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       # 前回の追跡データを復元（キャッシュ → 無ければ公開中サイトから取得）
       - name: Restore state
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: state
           key: state-${{ github.run_id }}
@@ -51,8 +51,8 @@ jobs:
         run: python collector/collect.py
 
       - name: Save state
-        if: always()
-        uses: actions/cache/save@v4
+        if: always() && hashFiles('state/state.json.gz') != ''
+        uses: actions/cache/save@v6
         with:
           path: state
           key: state-${{ github.run_id }}
@@ -60,12 +60,12 @@ jobs:
       - name: Bundle site
         run: cp state/state.json.gz site/data/state.json.gz
 
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
       - id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
       # 公開リポジトリは60日コミットが無いと定期実行が自動停止するので、30日ごとに1行だけコミット
       - name: Keepalive
