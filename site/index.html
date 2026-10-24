@@ -48,6 +48,8 @@ nav.tabs button{flex:1;border:0;background:none;color:var(--sub);font:inherit;fo
 nav.tabs button[aria-selected=true]{color:var(--ink);border-color:var(--accent)}
 .chips{display:flex;gap:6px;overflow-x:auto;padding:10px 0;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
+.chips.more{-webkit-mask-image:linear-gradient(to right,#000 85%,transparent);mask-image:linear-gradient(to right,#000 85%,transparent)}
+@media (min-width:601px){.chips{flex-wrap:wrap;overflow:visible}.chips.more{-webkit-mask-image:none;mask-image:none}}
 .chips button{flex:none;border:0;border-radius:999px;background:var(--chip);color:var(--ink);
   font:inherit;font-size:13px;padding:6px 12px;cursor:pointer}
 .chips button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
@@ -77,6 +79,7 @@ footer a{color:inherit}
 .empty{color:var(--sub);text-align:center;padding:60px 0}
 .seg.sm button{font-size:12px;padding:4px 10px}
 .playlbl{font-size:12px;color:var(--sub);white-space:nowrap}
+.playwrap{display:inline-flex;align-items:center;gap:6px}
 dialog#player{border:0;padding:0;width:min(960px,100%,calc((100vh - 140px) * 16 / 9));max-width:100%;background:var(--card);color:var(--ink);
   border-radius:12px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.4)}
 dialog#player::backdrop{background:rgba(0,0,0,.75)}
@@ -110,11 +113,11 @@ dialog#player::backdrop{background:rgba(0,0,0,.75)}
         <button data-kind="video" aria-pressed="true">動画</button>
         <button data-kind="live" aria-pressed="false">ライブ</button>
       </div>
-      <span class="playlbl">再生</span>
+      <div class="playwrap"><span class="playlbl">再生</span>
       <div class="seg sm" id="play">
         <button data-play="site" aria-pressed="true">サイト内</button>
         <button data-play="yt" aria-pressed="false">YouTube</button>
-      </div>
+      </div></div>
       <span id="updated"></span>
     </div>
     <nav class="tabs" role="tablist" id="tabs"></nav>
@@ -206,6 +209,7 @@ function render() {
   const cats = ["すべて", ...[...new Set(all.map(x => x.cat))].sort((a, b) => count(b) - count(a))];
   if (!cats.includes(cat)) cat = "すべて";
   document.getElementById("chips").innerHTML = cats.map(c => `<button aria-pressed="${c === cat}">${esc(c)}</button>`).join("");
+  chipFade();
   const rows = cat === "すべて" ? all : all.filter(x => x.cat === cat);
   const list = document.getElementById("list");
   if (!rows.length) { list.innerHTML = `<li class="empty">${tab === "now" ? "集計時点で配信中のライブはありません" : "データがまだありません"}</li>`; return; }
@@ -229,6 +233,17 @@ document.getElementById("tabs").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   tab = b.dataset.tab; save(); render(); window.scrollTo({ top: 0 });
 });
+const chipsEl = document.getElementById("chips");
+function chipFade() {  // 右に続きがあるときだけ端をぼかす
+  chipsEl.classList.toggle("more", chipsEl.scrollLeft + chipsEl.clientWidth < chipsEl.scrollWidth - 4);
+}
+chipsEl.addEventListener("scroll", chipFade, { passive: true });
+window.addEventListener("resize", chipFade);
+chipsEl.addEventListener("wheel", e => {  // マウスのホイールでも横に動かせるように
+  if (chipsEl.scrollWidth > chipsEl.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+    chipsEl.scrollLeft += e.deltaY; e.preventDefault();
+  }
+}, { passive: false });
 document.getElementById("chips").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   cat = b.textContent; render();
