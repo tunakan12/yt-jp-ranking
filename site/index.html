@@ -75,6 +75,21 @@ li:nth-child(-n+3) .rank .n{color:var(--accent)}
 footer{font-size:11px;color:var(--sub);text-align:center;padding:24px 16px 40px;line-height:1.8}
 footer a{color:inherit}
 .empty{color:var(--sub);text-align:center;padding:60px 0}
+.seg.sm button{font-size:12px;padding:4px 10px}
+.playlbl{font-size:12px;color:var(--sub);white-space:nowrap}
+dialog#player{border:0;padding:0;width:min(960px,100%,calc((100vh - 140px) * 16 / 9));max-width:100%;background:var(--card);color:var(--ink);
+  border-radius:12px;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+dialog#player::backdrop{background:rgba(0,0,0,.75)}
+.pv{position:relative;aspect-ratio:16/9;background:#000}
+.pv iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.pinfo{display:flex;gap:12px;align-items:flex-start;padding:12px 16px 14px}
+.pinfo .t{flex:1;min-width:0}
+.pinfo .t p{margin:0 0 4px;font-weight:700;font-size:15px;line-height:1.4}
+.pinfo .t span{font-size:12px;color:var(--sub)}
+.pbtn{flex:none;border:0;border-radius:999px;background:var(--chip);color:var(--ink);font:inherit;font-size:13px;
+  font-weight:700;padding:7px 14px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.pbtn.yt{background:var(--accent);color:#fff}
+@media (max-width:600px){dialog#player{border-radius:0;margin:auto 0}.pinfo{flex-wrap:wrap}.pinfo .t{flex-basis:100%}}
 @media (max-width:600px){
   li a{grid-template-columns:28px 128px 1fr;gap:10px}
   .rank .n{font-size:17px}
@@ -95,6 +110,11 @@ footer a{color:inherit}
         <button data-kind="video" aria-pressed="true">動画</button>
         <button data-kind="live" aria-pressed="false">ライブ</button>
       </div>
+      <span class="playlbl">再生</span>
+      <div class="seg sm" id="play">
+        <button data-play="site" aria-pressed="true">サイト内</button>
+        <button data-play="yt" aria-pressed="false">YouTube</button>
+      </div>
       <span id="updated"></span>
     </div>
     <nav class="tabs" role="tablist" id="tabs"></nav>
@@ -105,6 +125,14 @@ footer a{color:inherit}
   <p id="desc"></p>
   <ol id="list"></ol>
 </main>
+<dialog id="player" aria-label="動画プレーヤー">
+  <div class="pv" id="pv"></div>
+  <div class="pinfo">
+    <div class="t"><p id="ptitle"></p><span id="pch"></span></div>
+    <a class="pbtn yt" id="popen" target="_blank" rel="noopener">YouTubeで開く</a>
+    <button class="pbtn" id="pclose">閉じる</button>
+  </div>
+</dialog>
 <footer>
   動画はショートを除外。ライブは配信アーカイブと配信中の枠を集計しています。<br>
   YouTube Data API のデータを2時間ごとに集計した独自ランキングで、YouTube公式のものではありません。<br>
@@ -125,7 +153,8 @@ const DESC = {
   "live/daily": "直近24時間で再生数が増えた配信アーカイブ",
   "live/weekly": "直近7日間で再生数が増えた配信アーカイブ",
 };
-let data = null, kind = "video", tab = "trending", cat = "すべて";
+let data = null, kind = "video", tab = "trending", cat = "すべて", play = "site";
+try { if (localStorage.getItem("ytjp_play") === "yt") play = "yt"; } catch (e) {}
 
 function readHash() {
   const [k, t] = location.hash.slice(1).split("/");
@@ -179,7 +208,7 @@ function render() {
   const list = document.getElementById("list");
   if (!rows.length) { list.innerHTML = `<li class="empty">${tab === "now" ? "集計時点で配信中のライブはありません" : "データがまだありません"}</li>`; return; }
   list.innerHTML = rows.map(x => `
-    <li><a href="https://www.youtube.com/watch?v=${encodeURIComponent(x.id)}" target="_blank" rel="noopener">
+    <li><a href="https://www.youtube.com/watch?v=${encodeURIComponent(x.id)}" target="_blank" rel="noopener" data-id="${esc(x.id)}" data-ch="${esc(x.ch)}">
       <div class="rank"><span class="n">${x.rank}</span>${move(x)}</div>
       <div class="thumb"><img loading="lazy" src="https://i.ytimg.com/vi/${encodeURIComponent(x.id)}/mqdefault.jpg" alt="" onerror="this.remove()">${tab === "now" ? '<span class="dur live">● LIVE</span>' : `<span class="dur">${dur(x.dur)}</span>`}</div>
       <div>
@@ -202,6 +231,38 @@ document.getElementById("chips").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   cat = b.textContent; render();
 });
+function renderPlay() {
+  document.querySelectorAll("#play button").forEach(b => b.setAttribute("aria-pressed", b.dataset.play === play));
+}
+renderPlay();
+document.getElementById("play").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  play = b.dataset.play; renderPlay();
+  try { localStorage.setItem("ytjp_play", play); } catch (e) {}
+});
+
+const dlg = document.getElementById("player");
+function openPlayer(a) {
+  const id = a.dataset.id;
+  document.getElementById("pv").innerHTML =
+    `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&playsinline=1&rel=0" title="YouTube 動画プレーヤー" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  document.getElementById("ptitle").textContent = a.querySelector(".title").textContent;
+  document.getElementById("pch").textContent = a.dataset.ch;
+  document.getElementById("popen").href = a.href;
+  dlg.showModal();
+  try { window.goatcounter && window.goatcounter.count && window.goatcounter.count({ path: "play", title: "サイト内再生", event: true }); } catch (e) {}
+}
+function closePlayer() { if (dlg.open) dlg.close(); }
+dlg.addEventListener("close", () => { document.getElementById("pv").innerHTML = ""; });  // 閉じたら再生を止める
+dlg.addEventListener("click", e => { if (e.target === dlg) closePlayer(); });
+document.getElementById("pclose").addEventListener("click", closePlayer);
+document.getElementById("popen").addEventListener("click", closePlayer);
+document.getElementById("list").addEventListener("click", e => {
+  const a = e.target.closest("a[data-id]");
+  if (!a || play !== "site" || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+  e.preventDefault(); openPlayer(a);
+});
+
 window.addEventListener("hashchange", () => { if (readHash() && data) render(); });
 
 fetch("data/ranking.json", { cache: "no-store" }).then(r => r.json()).then(d => {
